@@ -32,22 +32,35 @@ app.post('/webhook', async (c) => {
 
   const body: LineWebhookBody = JSON.parse(rawBody)
 
-  await Promise.all(
-    body.events.map(async (event) => {
-      if (event.type === 'message' && event.replyToken && hasTranslatableText(event.message)) {
-        const text = stripUrls(event.message?.text ?? '')
+  for (const event of body.events) {
+    const replyToken = event.replyToken
+    if (
+      event.type !== 'message' ||
+      !replyToken ||
+      event.deliveryContext?.isRedelivery ||
+      !hasTranslatableText(event.message)
+    ) {
+      continue
+    }
+
+    const text = stripUrls(event.message?.text ?? '')
+    // 翻訳の完了を待たずに200を返す(LINE側のタイムアウト・再送を避けるため)。
+    // 実際の翻訳・返信はバックグラウンドで実行する。
+    c.executionCtx.waitUntil(
+      (async () => {
         try {
           const translated = await translate(c.env.AI, text)
-          await replyMessage(c.env.LINE_CHANNEL_ACCESS_TOKEN, event.replyToken, [
+          await replyMessage(c.env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, [
             { type: 'text', text: translated },
           ])
         } catch (error) {
-          // 失敗してもWebhookへは200を返す(LINE側の再送・重複翻訳を防ぐ)
+          // ここで投げ直さない: Webhookへの応答は既に返却済みで、
+          // 失敗してもLINE側の再送・重複翻訳にはつながらないようにする
           console.error('Failed to translate or reply:', error)
         }
-      }
-    }),
-  )
+      })(),
+    )
+  }
 
   return c.text('OK')
 })

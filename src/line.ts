@@ -11,6 +11,11 @@ export type LineEmoji = {
 export type LineWebhookEvent = {
   type: string
   replyToken?: string
+  // isRedelivery が true のイベントは、応答遅延等でLINEが再送してきたもの。
+  // 元の配信が処理中/処理済みの可能性があるため、再送分は処理をスキップする。
+  deliveryContext?: {
+    isRedelivery: boolean
+  }
   message?: {
     id: string
     type: string
