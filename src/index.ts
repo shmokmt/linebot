@@ -36,10 +36,15 @@ app.post('/webhook', async (c) => {
     body.events.map(async (event) => {
       if (event.type === 'message' && event.replyToken && hasTranslatableText(event.message)) {
         const text = stripUrls(event.message?.text ?? '')
-        const translated = await translate(c.env.AI, text)
-        await replyMessage(c.env.LINE_CHANNEL_ACCESS_TOKEN, event.replyToken, [
-          { type: 'text', text: translated },
-        ])
+        try {
+          const translated = await translate(c.env.AI, text)
+          await replyMessage(c.env.LINE_CHANNEL_ACCESS_TOKEN, event.replyToken, [
+            { type: 'text', text: translated },
+          ])
+        } catch (error) {
+          // 失敗してもWebhookへは200を返す(LINE側の再送・重複翻訳を防ぐ)
+          console.error('Failed to translate or reply:', error)
+        }
       }
     }),
   )

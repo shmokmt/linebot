@@ -8,7 +8,10 @@
   },
   "ai": {
     "binding": "AI"
-  }
+  },
+  "routes": [
+    { "pattern": "linebot.shmokmt.dev", "custom_domain": true }
+  ]
   // LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET are secrets, not vars.
   // Set them with:
   //   wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
