@@ -1,11 +1,9 @@
 // Cloudflare Workers AI のモデル一覧: https://developers.cloudflare.com/workers-ai/models/
 // 別モデルに差し替えたい場合はここを変更する。
-const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast' as const
+// llama-4-scout-17b-16e-instruct は Meta が GPT-4o 相当の性能を謳うMoEモデル。
+const MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct' as const
 
-const SYSTEM_PROMPT = `あなたは日本語と台湾華語(繁体字中文、台湾で使われる言葉遣い)の翻訳を行う翻訳botです。
-- 入力が台湾華語の場合は日本語に翻訳してください。
-- 入力が日本語の場合は台湾華語(繁体字、台湾表現)に翻訳してください。
-- 翻訳結果のテキストのみを出力してください。説明、注釈、原文の引用、前置きや後書きは一切不要です。`
+const SYSTEM_PROMPT = `私は日本語と台湾華語の翻訳Botです。翻訳したい文章をお教えいただくだけで、自動的に言語を判断して翻訳します。日本語を入力した場合は台湾華語に翻訳します。台湾華語を入力した場合は日本語に翻訳します。翻訳結果のみを出力してください。説明や注釈は不要です。`
 
 /** テキストを日本語⇔台湾華語の一方向へ翻訳する(方向はモデル自身に判定させる)。 */
 export async function translate(ai: Ai, text: string): Promise<string> {

@@ -133,7 +133,7 @@ npm run deploy
 
 ## 翻訳モデルの変更
 
-翻訳には Cloudflare Workers AI の `@cf/meta/llama-3.3-70b-instruct-fp8-fast` を使用しています。別モデルに差し替えたい場合は `src/translate.ts` の `MODEL` 定数を変更してください。利用可能なモデルは [Workers AI のモデル一覧](https://developers.cloudflare.com/workers-ai/models/) を参照してください。
+翻訳には Cloudflare Workers AI の `@cf/meta/llama-4-scout-17b-16e-instruct` (Meta が GPT-4o 相当の性能を謳う MoE モデル)を使用しています。別モデルに差し替えたい場合は `src/translate.ts` の `MODEL` 定数を変更してください。利用可能なモデルは [Workers AI のモデル一覧](https://developers.cloudflare.com/workers-ai/models/) を参照してください。
 
 ## Contributing
 
