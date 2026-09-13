@@ -30,7 +30,7 @@ app.post('/webhook', async (c) => {
     return c.text('Invalid signature', 401)
   }
 
-  const body: LineWebhookBody = JSON.parse(rawBody)
+  const body = JSON.parse(rawBody) as LineWebhookBody
 
   for (const event of body.events) {
     const replyToken = event.replyToken

@@ -35,8 +35,5 @@ export async function translate(ai: Ai, text: string): Promise<string> {
     ],
   })
 
-  if (typeof response === 'object' && response !== null && 'response' in response) {
-    return (response.response ?? '').trim()
-  }
-  return ''
+  return response.response.trim()
 }
