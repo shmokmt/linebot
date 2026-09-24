@@ -6,6 +6,7 @@ Cloudflare Workers + [Hono](https://hono.dev/) で動く、日本語⇔台湾華
 
 - 台湾華語が送られてきたら日本語に翻訳
 - 日本語が送られてきたら台湾華語(繁体字・台湾表現)に翻訳
+- かな・簡体字などから翻訳方向を先に判定し、方向が明確なときは一方向のプロンプトを使う
 - 翻訳結果のみを返信し、意味の解説などは行いません
 
 ## 特徴
@@ -128,12 +129,19 @@ npm run deploy
 | `npm run dev` | `wrangler dev` でローカル起動 |
 | `npm run deploy` | Cloudflare Workers にデプロイ |
 | `npm run typecheck` | `tsc --noEmit` で型チェック(CI でも実行) |
+| `npm test` | 言語判定・出力の後処理など、翻訳ロジックのユニットテスト |
 | `npm run mock:event -- "テキスト"` | Webhook イベントのモック送信 |
 | `npm run cf-typegen` | `wrangler.jsonc` の Bindings から型定義を生成 |
 
 ## 翻訳モデルの変更
 
 翻訳には Cloudflare Workers AI の `@cf/meta/llama-4-scout-17b-16e-instruct` (Meta が GPT-4o 相当の性能を謳う MoE モデル)を使用しています。別モデルに差し替えたい場合は `src/translate.ts` の `MODEL` 定数を変更してください。利用可能なモデルは [Workers AI のモデル一覧](https://developers.cloudflare.com/workers-ai/models/) を参照してください。
+
+精度のための周辺ロジック:
+
+- 入力言語をヒューリスティック判定し、明確なときは一方向の system prompt を使う
+- ユーザー文を `<text>` で囲み、`temperature: 0` で呼ぶ
+- 出力からラベル・引用符を除去し、中国語側は大陸用語・簡体字を台湾華語へ寄せる
 
 ## Contributing
 
