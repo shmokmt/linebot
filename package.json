@@ -13,13 +13,15 @@
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "mock:event": "node scripts/send-mock-event.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/*.test.ts"
   },
   "dependencies": {
     "hono": "^4.13.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260911.1",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "wrangler": "^4.110.0"
   },

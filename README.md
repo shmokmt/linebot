@@ -2,39 +2,59 @@
 
 [![CI](https://github.com/shmokmt/linebot/actions/workflows/ci.yml/badge.svg)](https://github.com/shmokmt/linebot/actions/workflows/ci.yml)
 
-Cloudflare Workers + [Hono](https://hono.dev/) で動く、日本語⇔台湾華語(繁体字)翻訳専用の LINE Bot です。
+Cloudflare Workers + [Hono](https://hono.dev/) で動く、短文チャット向けの LINE 翻訳 Bot です。デフォルトの言語ペアは日本語 ↔ 台湾華語(繁体字)で、グループごとに `/lang` で変更できます。
 
-- 台湾華語が送られてきたら日本語に翻訳
-- 日本語が送られてきたら台湾華語(繁体字・台湾表現)に翻訳
-- 翻訳結果のみを返信し、意味の解説などは行いません
+- 判定した言語の「もう一方」へ翻訳する(双方向)
+- 訳文だけを返す。説明や雑談はしない
+- 確信度が低い・数値/日時を含むなど必要なときだけレビューして最大1回修正する
 
 ## 特徴
 
 - **サーバーレス**: Cloudflare Workers 上で動作し、常時起動のサーバーは不要
 - **翻訳エンジンは Cloudflare Workers AI**: 外部 LLM API のキー管理不要(`AI` バインディングのみ)
-- **翻訳できないメッセージは無視**: スタンプ・画像などの非テキストメッセージ、絵文字のみのメッセージは無視し、URL はテキストから除去してから翻訳する
-- **ローカルモックスクリプト付き**: 実際の LINE アカウントや ngrok を使わずに Webhook の受信処理を試せる
+- **条件付きパイプライン**: 1回の翻訳を基本とし、曖昧さや数値などを含むときだけ Reviewer / Refiner を足す
+- **会話の文脈**: 直近の発言を Cache API に残し、主語省略・指示語の翻訳に使う
+- **翻訳できないメッセージは無視**: スタンプ・画像、絵文字のみ、URL のみ、`w` / `笑` / `ok` などの定型短文、言語ペア外の発言
 
 ## アーキテクチャ
 
 ```
-LINE Messaging API --(Webhook: POST /webhook)--> Cloudflare Workers (Hono)
-                                                        |
-                                                        |-- 署名検証 (x-line-signature)
-                                                        |-- スタンプ/絵文字のみ/URL のみのメッセージを除外
-                                                        |-- Cloudflare Workers AI で翻訳
-                                                        v
-                                             LINE Messaging API (reply API) で返信
+LINE Platform
+   │ Webhook (POST)
+   ▼
+[Webhook受信] ─ 署名検証 → 即200返却 → waitUntil
+   ▼
+[前処理 / スキップ判定] ─ スタンプ・URLのみ・絵文字のみ・定型短文は翻訳しない
+   ▼
+[言語判定] ─ 文字種ルール + ヒューリスティック。曖昧なら翻訳と同じ呼び出しに委譲
+   ▼
+[翻訳エージェント] ─ 直近履歴・用語集つきで1回呼び出し(構造化JSON)
+   │  出力: 訳文 / 確信度 / フラグ
+   ▼
+[レビュー要否判定] ── 不要 ──────────┐
+   │ 必要                             │
+   ▼                                  │
+[Reviewer (MQM)] → 重大な誤りあり → [Refiner] (最大1回)
+   ▼                                  │
+[返信] ◀──────────────────────────────┘
+   Reply API(失敗時は Push API)
 ```
 
 主なファイル:
 
 | ファイル | 役割 |
 | --- | --- |
-| `src/index.ts` | Hono アプリ本体。Webhook のエンドポイントとイベント処理のフロー |
-| `src/line.ts` | LINE Messaging API 関連の型・署名検証・返信API・メッセージのフィルタリング |
-| `src/translate.ts` | Cloudflare Workers AI を使った翻訳処理 |
-| `scripts/send-mock-event.mjs` | ローカル検証用の Webhook モック送信スクリプト |
+| `src/index.ts` | Hono アプリ。Webhook・コマンド・返信の配線 |
+| `src/pipeline.ts` | 言語判定 → キャッシュ → 翻訳 → 条件付きレビュー |
+| `src/translate.ts` | 翻訳エージェント(構造化JSON) |
+| `src/review.ts` | MQM レビューと最大1回の修正 |
+| `src/detect.ts` | 文字種 + ヒューリスティックの言語判定 |
+| `src/store.ts` | Cache API による設定・履歴・キャッシュ |
+| `src/commands.ts` | `/lang` `/on` `/off` `/glossary` `/fix` |
+| `src/line.ts` | 署名検証・Reply/Push・プロフィール取得 |
+| `scripts/send-mock-event.mjs` | ローカル検証用の Webhook モック送信 |
+
+履歴・設定・翻訳キャッシュは Redis の代わりに Workers の Cache API(TTL 付き)へ保存します。追加の KV / D1 は不要です。コロケーションや退避の都合で消えることがある点は、設計上の Redis+TTL と同じ割り切りです。
 
 ## 必要なもの
 
@@ -77,7 +97,7 @@ npm run dev
 npm run mock:event -- "你好，最近好嗎？"
 ```
 
-`.dev.vars` の `LINE_CHANNEL_SECRET` を使って正しい署名を計算し、`http://127.0.0.1:8787/webhook` にPOSTします(`MOCK_WEBHOOK_URL` 環境変数で送信先を変更可能)。実際の LINE 返信 API はダミートークンのままだと 401 になりますが、署名検証・メッセージのフィルタリング・翻訳呼び出し自体は確認できます。
+`.dev.vars` の `LINE_CHANNEL_SECRET` を使って正しい署名を計算し、`http://127.0.0.1:8787/webhook` にPOSTします(`MOCK_WEBHOOK_URL` 環境変数で送信先を変更可能)。実際の LINE 返信 API はダミートークンのままだと失敗しますが、署名検証・メッセージのフィルタリング・翻訳呼び出し自体は確認できます。Reply token 失効時は Push API へフォールバックします。
 
 実際に LINE アプリから動作確認したい場合は、ngrok などでトンネルを張り、その URL を LINE Developers コンソールの Webhook URL (`https://xxxx/webhook`) に設定してください。
 
@@ -100,7 +120,7 @@ npm run deploy
 
 | 名前 | 種類 | 説明 |
 | --- | --- | --- |
-| `LINE_CHANNEL_ACCESS_TOKEN` | Secret | LINE の reply API 呼び出しに使用 |
+| `LINE_CHANNEL_ACCESS_TOKEN` | Secret | LINE の Reply / Push API 呼び出しに使用 |
 | `LINE_CHANNEL_SECRET` | Secret | Webhook の署名検証に使用 |
 | `AI` | Binding | Cloudflare Workers AI へのバインディング(`wrangler.jsonc` の `ai.binding` で設定済み) |
 
@@ -109,7 +129,21 @@ npm run deploy
 | メソッド・パス | 説明 |
 | --- | --- |
 | `GET /` | ヘルスチェック |
-| `POST /webhook` | LINE Messaging API の Webhook。署名検証後、翻訳可能なテキストメッセージのみ翻訳して返信する |
+| `POST /webhook` | LINE Messaging API の Webhook |
+
+## Bot コマンド
+
+| コマンド | 説明 |
+| --- | --- |
+| `/lang ja zh` | 言語ペアを設定(`zh` は台湾華語)。`/lang ja en` も可 |
+| `/off` `/on` | 翻訳の一時停止・再開 |
+| `/glossary add 田中=Tanaka` | グループ用語を登録 |
+| `/glossary list` | 用語一覧 |
+| `/glossary remove 田中` | 用語削除 |
+| `/fix <正しい訳>` | 直前の訳を修正し、翻訳キャッシュに残す |
+| `/help` | コマンド一覧 |
+
+グループでは `🌐 [発言者名] 訳文` の形式で返し、`quoteToken` があれば引用返信します。Bot がグループに参加したとき(または 1:1 でフォローされたとき)に、外部 AI へ送信する旨を通知します。
 
 ## 翻訳をスキップする条件
 
@@ -118,8 +152,11 @@ npm run deploy
 - テキストメッセージ以外(スタンプ・画像・動画・位置情報など)
 - Unicode 絵文字や LINE 独自絵文字のみで構成されたメッセージ
 - URL のみのメッセージ(URL 自体はテキストから除去した上で翻訳するため、URL 以外に文字があれば翻訳は実行される)
+- `w` / `笑` / `ok` などの定型短文
+- 設定中の言語ペアに含まれない言語(高信頼度のとき)
+- `/off` 中の会話(コマンドは受け付ける)
 
-判定ロジックは `src/line.ts` の `hasTranslatableText` / `stripUrls` を参照してください。
+判定ロジックは `src/line.ts` の `hasTranslatableText` と `src/preprocess.ts` / `src/detect.ts` を参照してください。
 
 ## 開発用コマンド
 
@@ -128,16 +165,17 @@ npm run deploy
 | `npm run dev` | `wrangler dev` でローカル起動 |
 | `npm run deploy` | Cloudflare Workers にデプロイ |
 | `npm run typecheck` | `tsc --noEmit` で型チェック(CI でも実行) |
+| `npm test` | 言語判定・コマンド・レビュー判定などのユニットテスト |
 | `npm run mock:event -- "テキスト"` | Webhook イベントのモック送信 |
 | `npm run cf-typegen` | `wrangler.jsonc` の Bindings から型定義を生成 |
 
 ## 翻訳モデルの変更
 
-翻訳には Cloudflare Workers AI の `@cf/meta/llama-4-scout-17b-16e-instruct` (Meta が GPT-4o 相当の性能を謳う MoE モデル)を使用しています。別モデルに差し替えたい場合は `src/translate.ts` の `MODEL` 定数を変更してください。利用可能なモデルは [Workers AI のモデル一覧](https://developers.cloudflare.com/workers-ai/models/) を参照してください。
+翻訳・レビューには Cloudflare Workers AI の `@cf/meta/llama-4-scout-17b-16e-instruct` を使っています(レビューは別プロンプト)。差し替える場合は `src/constants.ts` の `TRANSLATE_MODEL` / `REVIEW_MODEL` を変更してください。利用可能なモデルは [Workers AI のモデル一覧](https://developers.cloudflare.com/workers-ai/models/) を参照してください。
 
 ## Contributing
 
-Issue・Pull Request 歓迎です。変更を送る際は `npm run typecheck` が通ることを確認してください。
+Issue・Pull Request 歓迎です。変更を送る際は `npm run typecheck` と `npm test` が通ることを確認してください。
 
 ## License
 

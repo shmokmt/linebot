@@ -8,6 +8,21 @@ export type LineEmoji = {
   emojiId: string
 }
 
+export type LineSource = {
+  type: 'user' | 'group' | 'room' | string
+  userId?: string
+  groupId?: string
+  roomId?: string
+}
+
+export type LineMessage = {
+  id: string
+  type: string
+  text?: string
+  emojis?: LineEmoji[]
+  quoteToken?: string
+}
+
 export type LineWebhookEvent = {
   type: string
   replyToken?: string
@@ -16,19 +31,20 @@ export type LineWebhookEvent = {
   deliveryContext?: {
     isRedelivery: boolean
   }
-  message?: {
-    id: string
-    type: string
-    text?: string
-    // LINE独自の絵文字(テキスト中の該当箇所を占めるプレースホルダの位置情報)
-    emojis?: LineEmoji[]
-  }
+  source?: LineSource
+  message?: LineMessage
   [key: string]: unknown
 }
 
 export type LineWebhookBody = {
   destination: string
   events: LineWebhookEvent[]
+}
+
+export type LineTextMessage = {
+  type: 'text'
+  text: string
+  quoteToken?: string
 }
 
 // Unicode絵文字(異体字セレクタ️・ZWJ結合‍を含む)にマッチする
@@ -58,6 +74,18 @@ export function hasTranslatableText(message: LineWebhookEvent['message']): boole
   return text.length > 0
 }
 
+export function conversationId(source: LineSource | undefined): string {
+  return source?.groupId ?? source?.roomId ?? source?.userId ?? 'unknown'
+}
+
+export function pushDestination(source: LineSource | undefined): string | undefined {
+  return source?.groupId ?? source?.roomId ?? source?.userId
+}
+
+export function isGroupSource(source: LineSource | undefined): boolean {
+  return source?.type === 'group' || source?.type === 'room'
+}
+
 async function hmacSha256Base64(secret: string, body: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
@@ -84,6 +112,16 @@ export async function verifySignature(
   return expected === signature
 }
 
+async function lineFetch(channelAccessToken: string, url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${channelAccessToken}`,
+      ...(init.headers ?? {}),
+    },
+  })
+}
+
 /**
  * reply API でメッセージを返信する。
  * replyToken は Webhook イベントごとに発行される一度限り・有効期限つきのトークンのため、
@@ -92,18 +130,97 @@ export async function verifySignature(
 export async function replyMessage(
   channelAccessToken: string,
   replyToken: string,
-  messages: { type: 'text'; text: string }[],
+  messages: LineTextMessage[],
 ): Promise<void> {
-  const res = await fetch('https://api.line.me/v2/bot/message/reply', {
+  const res = await lineFetch(channelAccessToken, 'https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${channelAccessToken}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ replyToken, messages }),
   })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`LINE reply API error: ${res.status} ${text}`)
+  }
+}
+
+/** replyToken 失効時のフォールバック。Push は送信数にカウントされる。 */
+export async function pushMessage(
+  channelAccessToken: string,
+  to: string,
+  messages: LineTextMessage[],
+): Promise<void> {
+  const res = await lineFetch(channelAccessToken, 'https://api.line.me/v2/bot/message/push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to, messages }),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`LINE push API error: ${res.status} ${text}`)
+  }
+}
+
+export function isExpiredReplyTokenError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return /reply API error: 400/.test(error.message) || /Invalid reply token/i.test(error.message)
+}
+
+export async function sendLineText(options: {
+  channelAccessToken: string
+  replyToken?: string
+  source?: LineSource
+  text: string
+  quoteToken?: string
+}): Promise<void> {
+  const messages: LineTextMessage[] = [
+    {
+      type: 'text',
+      text: options.text,
+      ...(options.quoteToken ? { quoteToken: options.quoteToken } : {}),
+    },
+  ]
+
+  if (options.replyToken) {
+    try {
+      await replyMessage(options.channelAccessToken, options.replyToken, messages)
+      return
+    } catch (error) {
+      if (!isExpiredReplyTokenError(error)) throw error
+    }
+  }
+
+  const to = pushDestination(options.source)
+  if (!to) {
+    throw new Error('No destination for LINE push fallback')
+  }
+  // quoteToken は reply 専用。Push では引用できない。
+  await pushMessage(options.channelAccessToken, to, [{ type: 'text', text: options.text }])
+}
+
+export async function getDisplayName(
+  channelAccessToken: string,
+  source: LineSource | undefined,
+  timeoutMs: number,
+): Promise<string | undefined> {
+  const userId = source?.userId
+  if (!userId) return undefined
+
+  const url =
+    source?.type === 'group' && source.groupId
+      ? `https://api.line.me/v2/bot/group/${source.groupId}/member/${userId}`
+      : source?.type === 'room' && source.roomId
+        ? `https://api.line.me/v2/bot/room/${source.roomId}/member/${userId}`
+        : `https://api.line.me/v2/bot/profile/${userId}`
+
+  try {
+    const res = await lineFetch(channelAccessToken, url, {
+      method: 'GET',
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!res.ok) return undefined
+    const data = (await res.json()) as { displayName?: string }
+    return data.displayName
+  } catch {
+    return undefined
   }
 }
