@@ -17,12 +17,16 @@ describe('detectSourceLanguage', () => {
     assert.equal(detectSourceLanguage('好喔'), 'zh')
   })
 
-  it('leaves kanji-only or Latin text undetermined', () => {
+  it('uses tinyld for longer undetermined CJK, but not short or Latin text', () => {
+    assert.equal(detectSourceLanguage('最近工作很忙'), 'zh')
+    assert.equal(detectSourceLanguage('我在超商買了便當'), 'zh')
+    assert.equal(detectSourceLanguage('大丈夫'), 'ja')
+    assert.equal(detectSourceLanguage('沒問題'), 'zh')
     assert.equal(detectSourceLanguage('了解'), 'unknown')
     assert.equal(detectSourceLanguage('確認'), 'unknown')
     assert.equal(detectSourceLanguage('你好'), 'unknown')
-    assert.equal(detectSourceLanguage('最近工作很忙'), 'unknown')
     assert.equal(detectSourceLanguage('OK'), 'unknown')
+    assert.equal(detectSourceLanguage('LLM'), 'unknown')
   })
 })
 

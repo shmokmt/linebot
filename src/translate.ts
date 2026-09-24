@@ -1,3 +1,5 @@
+import { detectAll } from 'tinyld/light'
+
 // Cloudflare Workers AI のモデル一覧: https://developers.cloudflare.com/workers-ai/models/
 // 別モデルに差し替えたい場合はここを変更する。
 // llama-4-scout-17b-16e-instruct は Meta が GPT-4o 相当の性能を謳うMoEモデル。
@@ -17,6 +19,12 @@ const SIMPLIFIED_ONLY =
 const JA_ENDINGS =
   /(?:です|ます|でした|ました|ください|ません|だった|だよ|だね|かな|けど)(?:[。．.！!？?\s]|$)/
 const ZH_PARTICLES = /[嗎吧呢喔啦耶]/
+
+// tinyld は短い漢字(了解→zh)やラテン略語を誤ることがあるので、
+// 3字未満と低信頼は unknown のまま LLM に任せる。
+const MIN_LID_CHARS = 3
+const MIN_LID_ACCURACY = 0.8
+const NON_LETTER_RE = /[\s\p{P}\p{S}]/gu
 
 export type SourceLanguage = 'ja' | 'zh' | 'unknown'
 
@@ -251,15 +259,28 @@ function hasKana(text: string): boolean {
   return HIRAGANA.test(text) || KATAKANA.test(text)
 }
 
+function significantLength(text: string): number {
+  return [...text.replace(NON_LETTER_RE, '')].length
+}
+
+function detectWithTinyld(text: string): SourceLanguage {
+  if (significantLength(text) < MIN_LID_CHARS) return 'unknown'
+
+  const [top] = detectAll(text, { only: ['ja', 'zh'] })
+  if (!top || top.accuracy < MIN_LID_ACCURACY) return 'unknown'
+  if (top.lang === 'ja' || top.lang === 'zh') return top.lang
+  return 'unknown'
+}
+
 /**
- * 日本語/中国語をヒューリスティックで判定する。
- * かながあれば日本語。簡体字や中国語の語気詞があれば中国語。
- * 漢字のみの短文(了解・確認・你好 など)は誤判定しやすいので unknown に倒す。
+ * 日本語/中国語を判定する。
+ * 1. かな・日本語語尾 → ja。簡体字専用字・中国語の語気詞 → zh。
+ * 2. それ以外は tinyld/light で ja/zh だけを見る。3字未満と低信頼は unknown。
  */
 export function detectSourceLanguage(text: string): SourceLanguage {
   if (hasKana(text) || JA_ENDINGS.test(text)) return 'ja'
   if (SIMPLIFIED_ONLY.test(text) || ZH_PARTICLES.test(text)) return 'zh'
-  return 'unknown'
+  return detectWithTinyld(text)
 }
 
 function promptFor(language: SourceLanguage): string {
