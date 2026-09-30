@@ -8,20 +8,24 @@
     "url": "https://github.com/shmokmt/linebot"
   },
   "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "dev": "cf dev",
+    "deploy": "cf deploy",
+    "build": "cf build",
+    "cf-typegen": "cf workers types",
     "mock:event": "node scripts/send-mock-event.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "cf workers types && tsc --noEmit"
   },
   "dependencies": {
     "hono": "^4.13.7"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260911.1",
+    "cf": "^1.0.0-beta.6",
     "typescript": "^5.9.2",
-    "wrangler": "^4.110.0"
+    "wrangler": "^4.144.0"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,

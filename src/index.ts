@@ -8,13 +8,7 @@ import {
 } from './line'
 import { translate } from './translate'
 
-type Bindings = {
-  LINE_CHANNEL_ACCESS_TOKEN: string
-  LINE_CHANNEL_SECRET: string
-  AI: Ai
-}
-
-const app = new Hono<{ Bindings: Bindings }>()
+const app = new Hono<{ Bindings: Env }>()
 
 app.get('/', (c) => {
   return c.text('OK')

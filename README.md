@@ -38,8 +38,8 @@ LINE Messaging API --(Webhook: POST /webhook)--> Cloudflare Workers (Hono)
 
 ## 必要なもの
 
-- Node.js 20 以上
-- Cloudflare アカウント(Workers AI を利用するため、ローカル開発時も含めて `wrangler login` が必要)
+- Node.js 22.18 以上([Cloudflare CLI `cf`](https://developers.cloudflare.com/cf/) が `cloudflare.config.ts` の読み込みに要求)
+- Cloudflare アカウント(Workers AI を利用するため、ローカル開発時も含めて `cf auth login` が必要)
 - LINE Developers アカウントと Messaging API チャネル
 
 ## セットアップ
@@ -49,10 +49,10 @@ npm install
 ```
 
 1. [LINE Developers コンソール](https://developers.line.biz/console/) で Messaging API チャネルを作成し、**チャネルアクセストークン**と**チャネルシークレット**を取得します。
-2. 翻訳には Cloudflare Workers AI (`AI` バインディング) を使用するため、追加の API キーは不要です。ただし `wrangler dev` でのローカル実行・デプロイの両方で Cloudflare アカウントへのログインが必要です。
+2. 翻訳には Cloudflare Workers AI (`AI` バインディング) を使用するため、追加の API キーは不要です。ただし `cf dev` でのローカル実行・デプロイの両方で Cloudflare アカウントへのログインが必要です。
 
    ```sh
-   npx wrangler login
+   npx cf auth login
    ```
 
 ### ローカル開発
@@ -67,7 +67,7 @@ cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-`AI` バインディングはローカル実行時も実際の Cloudflare のリモート推論を呼び出すため、`wrangler login` 未実施だと `wrangler dev` の起動時にエラーになります。
+`AI` バインディングはローカル実行時も実際の Cloudflare のリモート推論を呼び出すため、`cf auth login` 未実施だと `cf dev` の起動時にエラーになります。
 
 #### Webhook 受信処理をモックで試す
 
@@ -83,11 +83,11 @@ npm run mock:event -- "你好，最近好嗎？"
 
 ### デプロイ
 
-本番用の Secrets を設定します(初回のみ)。
+本番用の Secrets を設定します(初回のみ)。`cf` はまだ単一シークレットの put に未対応のため、Wrangler を Worker 名指定で使います(または `cf deploy --secrets-file` で一括アップロード)。
 
 ```sh
-npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
-npx wrangler secret put LINE_CHANNEL_SECRET
+npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN --name linebot
+npx wrangler secret put LINE_CHANNEL_SECRET --name linebot
 ```
 
 ```sh
@@ -102,7 +102,7 @@ npm run deploy
 | --- | --- | --- |
 | `LINE_CHANNEL_ACCESS_TOKEN` | Secret | LINE の reply API 呼び出しに使用 |
 | `LINE_CHANNEL_SECRET` | Secret | Webhook の署名検証に使用 |
-| `AI` | Binding | Cloudflare Workers AI へのバインディング(`wrangler.jsonc` の `ai.binding` で設定済み) |
+| `AI` | Binding | Cloudflare Workers AI へのバインディング(`cloudflare.config.ts` の `bindings.ai()` で設定済み) |
 
 ## エンドポイント
 
@@ -125,11 +125,11 @@ npm run deploy
 
 | コマンド | 説明 |
 | --- | --- |
-| `npm run dev` | `wrangler dev` でローカル起動 |
+| `npm run dev` | `cf dev` でローカル起動 |
 | `npm run deploy` | Cloudflare Workers にデプロイ |
-| `npm run typecheck` | `tsc --noEmit` で型チェック(CI でも実行) |
+| `npm run typecheck` | バインディング型を生成してから `tsc --noEmit`(CI でも実行) |
 | `npm run mock:event -- "テキスト"` | Webhook イベントのモック送信 |
-| `npm run cf-typegen` | `wrangler.jsonc` の Bindings から型定義を生成 |
+| `npm run cf-typegen` | `cloudflare.config.ts` の Bindings から型定義を生成 |
 
 ## 翻訳モデルの変更
 

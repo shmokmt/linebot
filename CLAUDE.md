@@ -10,16 +10,16 @@ A LINE bot on Cloudflare Workers (Hono) that does one thing: translate between J
 
 ```sh
 npm install
-npm run dev              # wrangler dev — requires `npx wrangler login` first (see below)
-npm run typecheck        # tsc --noEmit; also runs in CI (.github/workflows/ci.yml)
-npm run deploy           # wrangler deploy --minify
+npm run dev              # cf dev — requires `npx cf auth login` first (see below); needs Node.js >= 22.18
+npm run typecheck        # cf workers types && tsc --noEmit; also runs in CI (.github/workflows/ci.yml)
+npm run deploy           # cf deploy (minify via wrangler.config.ts)
 npm run mock:event -- "テキスト"   # send a signed mock LINE webhook event to the local server
-npm run cf-typegen       # regenerate Cloudflare binding types from wrangler.jsonc
+npm run cf-typegen       # regenerate Cloudflare binding types from cloudflare.config.ts
 ```
 
-There is no test suite. Verification is: `npm run typecheck` + manual exercise via `npm run mock:event` against `wrangler dev`.
+There is no test suite. Verification is: `npm run typecheck` + manual exercise via `npm run mock:event` against `cf dev`.
 
-The `AI` binding always calls Cloudflare's real Workers AI service, even under `wrangler dev` — local dev will fail to start with an auth error unless `npx wrangler login` has been run (or `CLOUDFLARE_API_TOKEN` is set), and every local run incurs real Workers AI usage.
+The `AI` binding always calls Cloudflare's real Workers AI service, even under `cf dev` — local dev will fail to start with an auth error unless `npx cf auth login` has been run (or `CLOUDFLARE_API_TOKEN` is set), and every local run incurs real Workers AI usage.
 
 ### Testing the webhook locally without a real LINE account
 
@@ -27,7 +27,7 @@ The `AI` binding always calls Cloudflare's real Workers AI service, even under `
 
 ## Architecture
 
-Everything lives in three small files under `src/`, wired together in `src/index.ts` (the Worker's entry point, per `wrangler.jsonc`'s `main`):
+Everything lives in three small files under `src/`, wired together in `src/index.ts` (the Worker's entry point, per `cloudflare.config.ts`'s `entrypoint`):
 
 - **`src/index.ts`** — the Hono app. `GET /` is a health check. `POST /webhook` verifies the LINE signature against the *raw* request body (must happen before `JSON.parse`), then loops over `body.events`. An event is skipped (not translated) if it's not a `message` event, has no `replyToken`, is a LINE webhook redelivery (`deliveryContext.isRedelivery`), or has no translatable text (see `hasTranslatableText`).
 - **`src/line.ts`** — hand-rolled LINE Messaging API types and helpers (no LINE SDK): `verifySignature` (HMAC-SHA256 via Web Crypto), `replyMessage` (reply API), `stripUrls`, and `hasTranslatableText` (filters out stickers/images, LINE-native emoji, Unicode emoji, and URL-only messages so they're never sent to translation).
@@ -43,9 +43,9 @@ The system prompt wraps the user's text in `<text>...</text>` and explicitly ins
 
 ### Bindings and secrets
 
-Configured in `wrangler.jsonc`:
+Configured in `cloudflare.config.ts` (project commands use the Cloudflare CLI `cf`; Wrangler remains only as the bundler behind `cf` via `wrangler.config.ts`):
 - `AI` — Workers AI binding (no key needed; local dev calls it remotely, see above).
-- `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET` — secrets, not `vars`. Set via `wrangler secret put <NAME>` for production; via `.dev.vars` (gitignored, copy from `.dev.vars.example`) for local dev.
-- `routes` — custom domain (`linebot.shmokmt.dev`) via `custom_domain: true`.
+- `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET` — secrets (`bindings.secret()`). Set for production with `npx wrangler secret put <NAME> --name linebot` (single-secret put is not in `cf` yet) or `cf deploy --secrets-file <PATH>`; via `.dev.vars` (gitignored, copy from `.dev.vars.example`) for local dev.
+- `domains` — custom domain (`linebot.shmokmt.dev`).
 
 No KV/D1/R2/Durable Objects — the Worker is fully stateless.
