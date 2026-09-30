@@ -6,16 +6,14 @@
   "observability": {
     "enabled": true
   },
-  "ai": {
-    "binding": "AI"
-  },
   "routes": [
     { "pattern": "linebot.shmokmt.dev", "custom_domain": true }
   ]
-  // LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET are secrets, not vars.
+  // LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET and OPENAI_API_KEY are secrets, not vars.
   // Set them with:
   //   wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
   //   wrangler secret put LINE_CHANNEL_SECRET
+  //   wrangler secret put OPENAI_API_KEY
   // For local dev, put them in .dev.vars instead (see .dev.vars.example).
   // "compatibility_flags": [
   //   "nodejs_compat"

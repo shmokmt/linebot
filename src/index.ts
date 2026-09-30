@@ -11,7 +11,7 @@ import { translate } from './translate'
 type Bindings = {
   LINE_CHANNEL_ACCESS_TOKEN: string
   LINE_CHANNEL_SECRET: string
-  AI: Ai
+  OPENAI_API_KEY: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -49,7 +49,7 @@ app.post('/webhook', async (c) => {
     c.executionCtx.waitUntil(
       (async () => {
         try {
-          const translated = await translate(c.env.AI, text)
+          const translated = await translate(c.env.OPENAI_API_KEY, text)
           await replyMessage(c.env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, [
             { type: 'text', text: translated },
           ])
