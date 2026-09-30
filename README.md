@@ -11,7 +11,8 @@ Cloudflare Workers + [Hono](https://hono.dev/) で動く、日本語⇔台湾華
 ## 特徴
 
 - **サーバーレス**: Cloudflare Workers 上で動作し、常時起動のサーバーは不要
-- **翻訳エンジンは Cloudflare Workers AI**: 外部 LLM API のキー管理不要(`AI` バインディングのみ)
+- **翻訳エンジンは OpenAI API (`gpt-6-luna`)**: SDK を使わず Chat Completions API を `fetch` で直接呼び出す。推論(reasoning)はオフにして応答速度を優先
+- **未翻訳の自動リトライ**: 翻訳結果が元の言語のまま返ってきた場合(ひらがな・カタカナの有無で判定)、翻訳方向を明示して1回だけ再翻訳する
 - **翻訳できないメッセージは無視**: スタンプ・画像などの非テキストメッセージ、絵文字のみのメッセージは無視し、URL はテキストから除去してから翻訳する
 - **ローカルモックスクリプト付き**: 実際の LINE アカウントや ngrok を使わずに Webhook の受信処理を試せる
 
@@ -22,7 +23,7 @@ LINE Messaging API --(Webhook: POST /webhook)--> Cloudflare Workers (Hono)
                                                         |
                                                         |-- 署名検証 (x-line-signature)
                                                         |-- スタンプ/絵文字のみ/URL のみのメッセージを除外
-                                                        |-- Cloudflare Workers AI で翻訳
+                                                        |-- OpenAI API (gpt-6-luna) で翻訳
                                                         v
                                              LINE Messaging API (reply API) で返信
 ```
@@ -33,13 +34,14 @@ LINE Messaging API --(Webhook: POST /webhook)--> Cloudflare Workers (Hono)
 | --- | --- |
 | `src/index.ts` | Hono アプリ本体。Webhook のエンドポイントとイベント処理のフロー |
 | `src/line.ts` | LINE Messaging API 関連の型・署名検証・返信API・メッセージのフィルタリング |
-| `src/translate.ts` | Cloudflare Workers AI を使った翻訳処理 |
+| `src/translate.ts` | OpenAI API を使った翻訳処理 |
 | `scripts/send-mock-event.mjs` | ローカル検証用の Webhook モック送信スクリプト |
 
 ## 必要なもの
 
 - Node.js 20 以上
-- Cloudflare アカウント(Workers AI を利用するため、ローカル開発時も含めて `wrangler login` が必要)
+- Cloudflare アカウント(デプロイ用)
+- OpenAI の API キー
 - LINE Developers アカウントと Messaging API チャネル
 
 ## セットアップ
@@ -49,15 +51,11 @@ npm install
 ```
 
 1. [LINE Developers コンソール](https://developers.line.biz/console/) で Messaging API チャネルを作成し、**チャネルアクセストークン**と**チャネルシークレット**を取得します。
-2. 翻訳には Cloudflare Workers AI (`AI` バインディング) を使用するため、追加の API キーは不要です。ただし `wrangler dev` でのローカル実行・デプロイの両方で Cloudflare アカウントへのログインが必要です。
-
-   ```sh
-   npx wrangler login
-   ```
+2. [OpenAI Platform](https://platform.openai.com/api-keys) で翻訳に使う **API キー**を発行します。
 
 ### ローカル開発
 
-`.dev.vars.example` を `.dev.vars` にコピーし、LINE のチャネルアクセストークン・チャネルシークレットを設定します(このファイルは `.gitignore` 済みでコミットされません)。
+`.dev.vars.example` を `.dev.vars` にコピーし、LINE のチャネルアクセストークン・チャネルシークレットと OpenAI の API キーを設定します(このファイルは `.gitignore` 済みでコミットされません)。
 
 ```sh
 cp .dev.vars.example .dev.vars
@@ -67,7 +65,7 @@ cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-`AI` バインディングはローカル実行時も実際の Cloudflare のリモート推論を呼び出すため、`wrangler login` 未実施だと `wrangler dev` の起動時にエラーになります。
+ローカル実行時も実際の OpenAI API を呼び出すため、翻訳のたびに API の利用料金が発生します。
 
 #### Webhook 受信処理をモックで試す
 
@@ -88,6 +86,7 @@ npm run mock:event -- "你好，最近好嗎？"
 ```sh
 npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
 npx wrangler secret put LINE_CHANNEL_SECRET
+npx wrangler secret put OPENAI_API_KEY
 ```
 
 ```sh
@@ -102,7 +101,7 @@ npm run deploy
 | --- | --- | --- |
 | `LINE_CHANNEL_ACCESS_TOKEN` | Secret | LINE の reply API 呼び出しに使用 |
 | `LINE_CHANNEL_SECRET` | Secret | Webhook の署名検証に使用 |
-| `AI` | Binding | Cloudflare Workers AI へのバインディング(`wrangler.jsonc` の `ai.binding` で設定済み) |
+| `OPENAI_API_KEY` | Secret | 翻訳に使う OpenAI API の呼び出しに使用 |
 
 ## エンドポイント
 
@@ -133,7 +132,7 @@ npm run deploy
 
 ## 翻訳モデルの変更
 
-翻訳には Cloudflare Workers AI の `@cf/meta/llama-4-scout-17b-16e-instruct` (Meta が GPT-4o 相当の性能を謳う MoE モデル)を使用しています。別モデルに差し替えたい場合は `src/translate.ts` の `MODEL` 定数を変更してください。利用可能なモデルは [Workers AI のモデル一覧](https://developers.cloudflare.com/workers-ai/models/) を参照してください。
+翻訳には OpenAI API の `gpt-6-luna` を `reasoning_effort: 'none'`(推論オフ)で使用しています。別モデルに差し替えたい場合は `src/translate.ts` の `MODEL` 定数を変更してください。利用可能なモデルは [OpenAI のモデル一覧](https://platform.openai.com/docs/models) を参照してください。
 
 ## Contributing
 
