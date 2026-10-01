@@ -5,10 +5,11 @@
   "compatibility_date": "2026-09-12",
   "observability": {
     "enabled": true
-  },
-  "routes": [
-    { "pattern": "linebot.shmokmt.dev", "custom_domain": true }
-  ]
+  }
+  // To serve the Worker on your own domain instead of *.workers.dev, add:
+  // "routes": [
+  //   { "pattern": "linebot.example.com", "custom_domain": true }
+  // ],
   // LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET and OPENAI_API_KEY are secrets, not vars.
   // Set them with:
   //   wrangler secret put LINE_CHANNEL_ACCESS_TOKEN

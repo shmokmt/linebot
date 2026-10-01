@@ -49,6 +49,6 @@ The model is `gpt-6-luna` with `reasoning_effort: 'none'`. Even so, short Chines
 
 Configured in `wrangler.jsonc`:
 - `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`, `OPENAI_API_KEY` — secrets, not `vars`. Set via `wrangler secret put <NAME>` for production; via `.dev.vars` (gitignored, copy from `.dev.vars.example`) for local dev.
-- `routes` — custom domain (`linebot.shmokmt.dev`) via `custom_domain: true`.
+- `routes` — not set, so the Worker deploys to `*.workers.dev`. A commented-out `custom_domain` example shows how to use your own domain; a custom domain attached via the dashboard is left alone by `wrangler deploy`.
 
 No AI binding and no KV/D1/R2/Durable Objects — the Worker is fully stateless.
