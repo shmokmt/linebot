@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/shmokmt/linebot/actions/workflows/ci.yml/badge.svg)](https://github.com/shmokmt/linebot/actions/workflows/ci.yml)
 
+日本語 | [台灣華語](./README.zh-TW.md)
+
 Cloudflare Workers + [Hono](https://hono.dev/) で動く、日本語⇔台湾華語(繁体字)翻訳専用の LINE Bot です。
 
 - 台湾華語が送られてきたら日本語に翻訳
@@ -94,6 +96,10 @@ npm run deploy
 ```
 
 デプロイ後に表示される Workers の URL + `/webhook` を LINE Developers コンソールの Webhook URL に設定し、Webhook の利用を ON にしてください。
+
+#### 独自ドメインを使う場合
+
+デフォルトでは `*.workers.dev` にデプロイされます。独自ドメインで公開したい場合は、`wrangler.jsonc` のコメントアウトされた `routes` を有効にし、`pattern` を Cloudflare で管理している自分のドメインに書き換えてください。Cloudflare ダッシュボードから Workers にカスタムドメインを割り当てても構いません(`routes` 未設定のままデプロイしても、ダッシュボードで設定したカスタムドメインは削除されません)。
 
 ## 環境変数・Secrets
 
