@@ -1,6 +1,7 @@
 # linebot
 
 [![CI](https://github.com/shmokmt/linebot/actions/workflows/ci.yml/badge.svg)](https://github.com/shmokmt/linebot/actions/workflows/ci.yml)
+[![Deploy](https://github.com/shmokmt/linebot/actions/workflows/deploy.yml/badge.svg)](https://github.com/shmokmt/linebot/actions/workflows/deploy.yml)
 
 日本語 | [台灣華語](./README.zh-TW.md)
 
@@ -96,6 +97,19 @@ npm run deploy
 ```
 
 デプロイ後に表示される Workers の URL + `/webhook` を LINE Developers コンソールの Webhook URL に設定し、Webhook の利用を ON にしてください。
+
+#### GitHub Actions
+
+`main` への push（プルリクエストのマージを含む）と、Actions タブからの手動実行（`workflow_dispatch`）で、型チェックのあと Cloudflare Workers にデプロイします。定義は [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) です。
+
+リポジトリの Actions secrets に次を設定してください。
+
+| 名前 | 説明 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | [Account API tokens](https://dash.cloudflare.com/?to=/:account/api-tokens) で作成したトークン。権限は **Edit Cloudflare Workers** を選び、対象アカウントに絞る |
+| `CLOUDFLARE_ACCOUNT_ID` | デプロイ先アカウントの ID |
+
+`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_CHANNEL_SECRET`、`OPENAI_API_KEY` は Workers 側の Secrets のままです。このワークフローはそれらを上書きしないので、未設定のときは上の `wrangler secret put` を一度実行してください。
 
 #### 独自ドメインを使う場合
 

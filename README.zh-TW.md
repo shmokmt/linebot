@@ -1,6 +1,7 @@
 # linebot
 
 [![CI](https://github.com/shmokmt/linebot/actions/workflows/ci.yml/badge.svg)](https://github.com/shmokmt/linebot/actions/workflows/ci.yml)
+[![Deploy](https://github.com/shmokmt/linebot/actions/workflows/deploy.yml/badge.svg)](https://github.com/shmokmt/linebot/actions/workflows/deploy.yml)
 
 [日本語](./README.md) | 台灣華語
 
@@ -96,6 +97,19 @@ npm run deploy
 ```
 
 部署後，把顯示的 Workers 網址加上 `/webhook` 設定到 LINE Developers Console 的 Webhook URL，並開啟「Use webhook」。
+
+#### GitHub Actions
+
+push 到 `main`（包含合併 pull request）時，以及從 Actions 分頁手動執行（`workflow_dispatch`）時，會先做型別檢查，再部署到 Cloudflare Workers。定義在 [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml)。
+
+請在儲存庫的 Actions secrets 設定以下項目。
+
+| 名稱 | 說明 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | 在 [Account API tokens](https://dash.cloudflare.com/?to=/:account/api-tokens) 建立的權杖。權限選擇 **Edit Cloudflare Workers**，並限制在目標帳號 |
+| `CLOUDFLARE_ACCOUNT_ID` | 部署目標帳號的 ID |
+
+`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_CHANNEL_SECRET`、`OPENAI_API_KEY` 仍是 Workers 端的 Secrets。這個 workflow 不會覆寫它們；若尚未設定，請先執行一次上面的 `wrangler secret put`。
 
 #### 使用自己的網域
 
