@@ -12,7 +12,7 @@ A LINE bot on Cloudflare Workers (Hono) that does one thing: translate between J
 npm install
 npm run dev              # wrangler dev — requires `npx wrangler login` first (see below)
 npm run typecheck        # tsc --noEmit; also runs in CI (.github/workflows/ci.yml)
-npm run deploy           # wrangler deploy --minify; CI deploy is .github/workflows/deploy.yml
+npm run deploy           # wrangler deploy --minify; local only, not GitHub Actions
 npm run mock:event -- "テキスト"   # send a signed mock LINE webhook event to the local server
 npm run cf-typegen       # regenerate Cloudflare binding types from wrangler.jsonc
 ```
@@ -48,7 +48,9 @@ The model is `gpt-6-luna` with `reasoning_effort: 'none'`. Even so, short Chines
 ### Bindings and secrets
 
 Configured in `wrangler.jsonc`:
-- `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`, `OPENAI_API_KEY` — secrets, not `vars`. Set via `wrangler secret put <NAME>` for production; via `.dev.vars` (gitignored, copy from `.dev.vars.example`) for local dev. `.github/workflows/deploy.yml` does not upload these; it only runs `wrangler deploy --minify` after typecheck, on push to `main` and `workflow_dispatch`. That workflow needs GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+- `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`, `OPENAI_API_KEY` — secrets, not `vars`. Set via `wrangler secret put <NAME>` for production; via `.dev.vars` (gitignored, copy from `.dev.vars.example`) for local dev.
 - `routes` — not set, so the Worker deploys to `*.workers.dev`. A commented-out `custom_domain` example shows how to use your own domain; a custom domain attached via the dashboard is left alone by `wrangler deploy`.
 
 No AI binding and no KV/D1/R2/Durable Objects — the Worker is fully stateless.
+
+Do not add a GitHub Actions workflow that deploys this public repository to a personal Cloudflare account. A push to `main` (and `workflow_dispatch`) runs with Actions secrets, so a merged workflow or Worker change can send out `CLOUDFLARE_API_TOKEN` and the Worker secrets (`LINE_*`, `OPENAI_API_KEY`). Production deploy stays a local `npm run deploy`.
